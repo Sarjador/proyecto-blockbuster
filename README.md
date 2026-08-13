@@ -70,6 +70,7 @@ listados abajo son los valores por defecto).
 | Readarr | http://localhost:8787 | Idem con Jackett + mirror `rreading-glasses` (ver §5). |
 | Bazarr | http://localhost:6767 | Conectar con Sonarr y Radarr por API. |
 | Jackett | http://localhost:9117 | Añadir indexadores. |
+| qBittorrent | http://localhost:8080 | Cliente torrent. User/pass por defecto `admin` / `adminadmin` (cambia al primer login). |
 | Tracearr | http://localhost:3000 | Ver §4 para los claim tokens. |
 | FlareSolverr | **no acceso web** | Se configura automáticamente en Jackett. |
 
@@ -166,6 +167,7 @@ mounts.
 | Readarr | `${READARR_PORT}:8787` |
 | Bazarr | `${BAZARR_PORT}:6767` |
 | Jackett | `${JACKETT_PORT}:9117` |
+| qBittorrent | `${QBITTORRENT_PORT}:8080` + `6881/tcp` + `6881/udp` |
 | Tracearr | `${TRACEARR_PORT}:3000` |
 | **FlareSolverr** | **no publicado** (solo red interna) |
 
@@ -173,7 +175,47 @@ Ajusta los valores en el `.env` si tu host tiene algún conflicto.
 
 ---
 
-## 7. Troubleshooting
+## 7. Conectar qBittorrent a Radarr y Sonarr
+
+Una vez qBittorrent está corriendo, hay que declararlo como **Download Client**
+(no como Indexer) en cada *Arr.
+
+**1. Configura qBittorrent** (una sola vez, en `http://localhost:8080`):
+- Login: `admin` / `adminadmin` (te obligará a cambiarlos al primer acceso).
+- (Opcional) `Tools → Options → Downloads`: cambia la "Default Save Path" a
+  `/downloads` si no lo está ya (es donde apunta el volumen `${DATA_ROOT}/torrents`).
+- (Opcional) Activa "Append torrent's label" si quieres organizar por etiqueta.
+
+**2. En Radarr** (`http://localhost:7878`):
+- `Settings → Download Clients → + Add → qBittorrent`
+- **Name**: `qBittorrent`
+- **Host**: `qbittorrent` (hostname interno, NO `localhost`)
+- **Port**: `8080`
+- **Username**: el que pusiste
+- **Password**: el que pusiste
+- **Category** (importante): `movies` — así Radarr etiqueta los torrents y
+  qBittorrent los pone en una subcarpeta por categoría
+- **Use SSL**: ☐
+- **Test** → **Save**
+
+**3. En Sonarr** (`http://localhost:8989`):
+- Igual pero la **Category** es `tv` (o `anime` si quieres separar)
+
+### Cómo funciona el ciclo completo
+
+```
+Seerr (petición) → Radarr (busca en Jackett) → qBittorrent (descarga)
+   → al terminar, Radarr importa el archivo a /arr-data/Peliculas/
+   → Jellyfin refresca la biblioteca y muestra la nueva película
+```
+
+Hard links entre `/downloads/` y `/arr-data/` solo funcionarán en FS POSIX
+ext4/btrfs/xfs. En NTFS/v9fs (caso W10), Radarr **copia** el archivo y luego
+lo borra de `/downloads/`. Cada download duplica el espacio temporalmente.
+
+---
+
+## 8. Troubleshooting
 
 ### "Permission denied" al escribir en `${DATA_ROOT}`
 - Verifica que `PUID`/`PGID` en el `.env` coinciden con tu UID/GID del host
@@ -209,7 +251,7 @@ Ajusta los valores en el `.env` si tu host tiene algún conflicto.
 
 ---
 
-## 8. Arquitectura decisional
+## 9. Arquitectura decisional
 
 Las decisiones técnicas (por qué `podman-compose`, por qué un volumen único,
 por qué imágenes `linuxserver/*`, por qué FlareSolverr aislado) están
@@ -220,7 +262,7 @@ Las capacidades del sistema (qué debe hacer cada servicio) están en
 
 ---
 
-## 9. Licencia y aviso
+## 10. Licencia y aviso
 
 Este repositorio es un orquestador. Las imágenes y servicios desplegados
 mantienen sus propias licencias (mayoritariamente GPL/Apache). El usuario es
@@ -230,7 +272,7 @@ Las fuentes consultadas para construir este stack están en [`Sources.txt`](Sour
 
 ---
 
-## 10. Despliegue en Windows 10/11 (probado en este repo)
+## 11. Despliegue en Windows 10/11 (probado en este repo)
 
 Esta sección documenta el caso real probado en W10 + `podman-machine-default`
 (WSL2, Fedora 41).

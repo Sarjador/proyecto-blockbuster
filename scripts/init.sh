@@ -63,6 +63,7 @@ SERVICES=(
     "config/bazarr"
     "config/jackett"
     "config/flaresolverr"
+    "config/qbittorrent"
     "config/tracearr"
 )
 
