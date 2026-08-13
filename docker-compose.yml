@@ -2,6 +2,19 @@
 # Proyecto-Blockbuster — stack multimedia unificado
 # Levantable con:  podman-compose up -d
 # Compatible con la spec Compose 3.8 (soporte verificado de podman-compose).
+#
+# Estructura de DATA_ROOT esperada (ver README §"Estructura del host"):
+#   ${DATA_ROOT}/torrents/        # zona de staging para descargas
+#   ${DATA_ROOT}/media/movies/    # Radarr root 1 (Peliculas, opcional)
+#   ${DATA_ROOT}/media/tv/        # Sonarr root 1 (Series, opcional)
+#   ${DATA_ROOT}/media/music/     # Lidarr
+#   ${DATA_ROOT}/media/books/     # Readarr
+#   ${DATA_ROOT}/config/<servicio>/
+#
+# Si tu contenido YA existe con otra estructura (ej. /Peliculas, /Series en
+# lugar de /media/movies, /media/tv), el .env puede apuntar a la carpeta
+# padre y cada *Arr se configura en su UI con "Root Folders" apuntando a
+# los subdirectorios reales. Ver README §"Adaptación a contenido existente".
 # =============================================================================
 
 version: "3.8"
@@ -34,7 +47,11 @@ services:
       - JELLYFIN_PublishedServerUrl=http://localhost:${JELLYFIN_PORT}
     volumes:
       - ${DATA_ROOT}/config/jellyfin:/config:z
-      - ${DATA_ROOT}/media:/media:z
+      # DATA_ROOT contiene la biblioteca completa (Peliculas, Series, Anime,
+      # Hanime, Otros, Documentales). Jellyfin escanea la raíz y configura
+      # una biblioteca por subcarpeta. Read-only para que Jellyfin no
+      # modifique tu colección.
+      - ${DATA_ROOT}:/media:ro,z
       - ${DATA_ROOT}/torrents:/torrents:ro,z
 
   # ---------------------------------------------------------------------------
@@ -56,6 +73,14 @@ services:
 
   # ---------------------------------------------------------------------------
   # Gestores automatizados de bibliotecas
+  #
+  # NOTA sobre root folders: el *Arr espera configurar uno o varios "Root
+  # Folders" desde la UI. Por defecto montamos DATA_ROOT en /arr-data para
+  # que el operador apunte cada *Arr a su subcarpeta real desde la UI
+  # (ej. Radarr → /arr-data/Peliculas y /arr-data/Documentales,
+  #       Sonarr → /arr-data/Series y /arr-data/Anime).
+  # Si tu DATA_ROOT ya sigue /media/movies, /media/tv, los root folders
+  # por defecto funcionan directamente.
   # ---------------------------------------------------------------------------
   sonarr:
     <<: *arr-common
@@ -66,7 +91,7 @@ services:
     volumes:
       - ${DATA_ROOT}/config/sonarr:/config:z
       - ${DATA_ROOT}/torrents:/downloads:z
-      - ${DATA_ROOT}/media/tv:/tv:z
+      - ${DATA_ROOT}:/arr-data:z
 
   radarr:
     <<: *arr-common
@@ -77,7 +102,7 @@ services:
     volumes:
       - ${DATA_ROOT}/config/radarr:/config:z
       - ${DATA_ROOT}/torrents:/downloads:z
-      - ${DATA_ROOT}/media/movies:/movies:z
+      - ${DATA_ROOT}:/arr-data:z
 
   lidarr:
     <<: *arr-common
@@ -88,7 +113,7 @@ services:
     volumes:
       - ${DATA_ROOT}/config/lidarr:/config:z
       - ${DATA_ROOT}/torrents:/downloads:z
-      - ${DATA_ROOT}/media/music:/music:z
+      - ${DATA_ROOT}:/arr-data:z
 
   readarr:
     <<: *arr-common
@@ -102,7 +127,7 @@ services:
     volumes:
       - ${DATA_ROOT}/config/readarr:/config:z
       - ${DATA_ROOT}/torrents:/downloads:z
-      - ${DATA_ROOT}/media/books:/books:z
+      - ${DATA_ROOT}:/arr-data:z
 
   # ---------------------------------------------------------------------------
   # Subtítulos
@@ -115,7 +140,7 @@ services:
       - "${BAZARR_PORT}:6767"
     volumes:
       - ${DATA_ROOT}/config/bazarr:/config:z
-      - ${DATA_ROOT}/media:/media:z
+      - ${DATA_ROOT}:/media:z
 
   # ---------------------------------------------------------------------------
   # Indexadores + evasión de Cloudflare

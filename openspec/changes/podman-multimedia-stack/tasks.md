@@ -40,5 +40,5 @@
 ## 6. Cierre del change
 
 - [x] 6.1 Confirmar que ningún secreto real quedó commiteado (`grep -rE 'api_key|api_key=' .env.example` y revisión manual).
-- [ ] 6.2 Hacer un commit inicial con mensaje `chore: scaffold podman multimedia stack` siguiendo el formato de la guía global (`common/git-workflow.md`).
+- [x] 6.2 Hacer un commit inicial con mensaje `chore: scaffold podman multimedia stack` siguiendo el formato de la guía global (`common/git-workflow.md`).
 - [x] 6.3 Ejecutar `npx openspec validate --change podman-multimedia-stack --strict` y resolver cualquierwarning antes de pedir la revisión.

@@ -24,7 +24,9 @@ La motivación completa y las fuentes que respaldan cada decisión están en
 
 > **Windows (WSL2)**: este stack se ha diseñado para Linux. En Windows el
 > comportamiento de bind mounts y rootless puede requerir adaptaciones; se
-> recomienda ejecutarlo en una VM Linux o WSL2 con systemd.
+> recomienda ejecutarlo en una VM Linux o WSL2 con systemd. Si estás en
+> Windows 10/11, salta directamente a §10 "Despliegue en Windows 10/11"
+> antes de continuar.
 
 ---
 
@@ -225,3 +227,114 @@ mantienen sus propias licencias (mayoritariamente GPL/Apache). El usuario es
 responsable del uso del contenido que descargue.
 
 Las fuentes consultadas para construir este stack están en [`Sources.txt`](Sources.txt).
+
+---
+
+## 10. Despliegue en Windows 10/11 (probado en este repo)
+
+Esta sección documenta el caso real probado en W10 + `podman-machine-default`
+(WSL2, Fedora 41).
+
+### 10.1. Lo importante: ¿dónde corre el stack?
+
+`podman` en W10 delega en una **VM WSL2 Fedora** (`podman-machine-default`).
+Los contenedores NO corren en Windows directamente: corren en la VM. Esto
+implica:
+
+- Los paths de `DATA_ROOT` en el `.env` son **paths de la VM** (Linux), no
+  de Windows.
+- Los volúmenes NTFS de Windows están disponibles dentro de la VM en
+  `/mnt/<letra>/...` (ej. `F:\Videos` → `/mnt/f/Videos`).
+- El `chown` no funciona en NTFS ni en `9p/DrvFS`; `init.sh` lo detecta y
+  aplica `chmod 777` automáticamente.
+- Los **hard links** entre `torrents/` y `media/` no funcionarán en NTFS;
+  cada download **duplicará el espacio** hasta que el torrent se limpie.
+
+### 10.2. Caso típico: tu colección ya existe
+
+Si tu biblioteca ya está en `F:\Videos` con subcarpetas (`Peliculas/`,
+`Series/`, etc.) **NO la reorganices** para encajar en `media/movies/`,
+`media/tv/`. En su lugar:
+
+1. Apunta `DATA_ROOT` a la raíz: `DATA_ROOT=/mnt/f/Videos`.
+2. Cada `*Arr` se monta `${DATA_ROOT}` en `/arr-data` y configura en la UI
+   sus **Root Folders** apuntando a los subdirectorios reales:
+
+   | Servicio | Root folders sugeridos |
+   |---|---|
+   | Radarr  | `/arr-data/Peliculas`, `/arr-data/Documentales` |
+   | Sonarr  | `/arr-data/Series`, `/arr-data/Anime` |
+   | Lidarr  | (vacío si no tienes música) |
+   | Readarr | (vacío si no tienes libros) |
+   | Jellyfin | bibliotecas por cada subcarpeta: Peliculas, Series, Anime, Hanime, Otros, Documentales |
+
+3. `Hanime` y `Otros` quedan como bibliotecas Jellyfin estáticas (los *Arr
+   no las gestionan).
+
+### 10.3. Procedimiento paso a paso (W10 + WSL2)
+
+```powershell
+# 0. Verificar que podman-machine está corriendo (en PowerShell o Git Bash)
+podman machine list
+# NAME                     VM TYPE     ...   LAST UP
+# podman-machine-default*  wsl         ...   Currently running
+
+# 1. Editar .env para apuntar a tu colección
+cp .env.example .env
+# Abrir .env y poner:
+#   DATA_ROOT=/mnt/f/Videos         # (o donde esté tu colección)
+#   PUID=1000
+#   PGID=1000
+#   TZ=Europe/Madrid
+
+# 2. Ejecutar init.sh DENTRO de la VM (no desde Git Bash, porque Git Bash
+#    no ve /mnt/f/).
+podman machine ssh -- 'bash /mnt/f/GITHUB_REPOS/Proyecto-Blockbuster/scripts/init.sh'
+# Detecta el FS (v9fs/ntfs) y hace chmod 777. No aplica chown porque
+# no funcionaría.
+
+# 3. Levantar el stack
+podman compose up -d
+
+# 4. Comprobar estado
+bash scripts/healthcheck.sh     # sí, desde Git Bash funciona
+
+# 5. Acceder desde el navegador
+# http://localhost:8096  → Jellyfin
+# http://localhost:8989  → Sonarr
+# http://localhost:7878  → Radarr
+# ... (los puertos vienen de .env)
+```
+
+### 10.4. Verificación E2E (resultados reales)
+
+Con `DATA_ROOT=/mnt/f/Videos` y la estructura `Peliculas/Series/Anime/...`:
+
+| Comprobación | Resultado |
+|---|---|
+| 10/10 servicios `running` | ✅ en <60s |
+| Jellyfin ve las 6 categorías en `/media` (read-only) | ✅ |
+| Sonarr puede escribir en `/arr-data/Peliculas` | ✅ |
+| FlareSolverr sin puertos en host (`podman port flaresolverr` vacío) | ✅ |
+| Sonarr → Jackett (interno) | HTTP 301 |
+| Radarr → FlareSolverr (interno) | HTTP 200 |
+| Jellyfin accesible desde W10 en `localhost:8096` | HTTP 302 (wizard inicial) |
+| Hard link NTFS entre `torrents/` y `media/` | ❌ no soportado por v9fs/DrvFS |
+
+### 10.5. Limitaciones específicas de W10
+
+- **Sin hard links reales**: cada download duplica el espacio hasta que
+  limpias el torrent. Con 200 GB libres en `F:` y descargas típicas de
+  1-10 GB, es manejable. Si te quedas sin espacio, programa limpieza
+  automática de torrents completados en tu cliente.
+- **Rendimiento**: WSL2 usa 9P/DrvFS para exponer `F:` a la VM, lo que
+  añade algo de latencia. Se nota especialmente en escaneos de bibliotecas
+  grandes. Si molesta, mueve la biblioteca a un volumen nativo de la VM
+  (`/home/user/multimedia`) y sincroniza con `rsync` desde `F:\Videos`.
+- **Permisos**: como `chown` no funciona en NTFS, los contenedores ven
+  los archivos con `root:root` aunque el host diga `user:user`. Los
+  contenedores con `PUID=1000` no podrán borrar/renombrar archivos de tu
+  colección existente. Si necesitas hacerlo, entra al contenedor:
+  `podman exec -u root <servicio> rm /arr-data/Peliculas/...`.
+- **Claim tokens de Tracearr**: Tracearr usa `JELLYFIN_URL=http://jellyfin:8096`
+  internamente. Funciona aunque la URL externa sea `http://localhost:8096`.
