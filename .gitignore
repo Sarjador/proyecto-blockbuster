@@ -1,0 +1,50 @@
+# Secrets y configuración local
+.env
+.env.local
+*.env.local
+
+# Datos y configuración generada por los contenedores
+data/
+*.log
+logs/
+
+# Paths típicos de volúmenes montados en el host
+/opt/multimedia/
+/var/lib/podman/multimedia/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.env.python
+
+# Outputs / artefactos
+outputs/
+Outputs/
+agent_workspace/
+*.tmp
+*.bak
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OpenSpec
+openspec/changes/archive/
+
+# Agentes / herramientas del entorno del usuario (no son parte del proyecto)
+.claude/
+.hermes/
+.opencode/
+.mavis/

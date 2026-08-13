@@ -1,0 +1,174 @@
+# =============================================================================
+# Proyecto-Blockbuster — stack multimedia unificado
+# Levantable con:  podman-compose up -d
+# Compatible con la spec Compose 3.8 (soporte verificado de podman-compose).
+# =============================================================================
+
+version: "3.8"
+
+# Valores comunes para los servicios LinuxServer (*Arr, Bazarr, Jackett).
+x-arr-common: &arr-common
+  restart: unless-stopped
+  environment:
+    - PUID=${PUID}
+    - PGID=${PGID}
+    - TZ=${TZ}
+  networks:
+    - multimedia-net
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Núcleo: servidor de medios
+  # ---------------------------------------------------------------------------
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    networks:
+      - multimedia-net
+    ports:
+      - "${JELLYFIN_PORT}:8096"
+    environment:
+      - TZ=${TZ}
+      - JELLYFIN_PublishedServerUrl=http://localhost:${JELLYFIN_PORT}
+    volumes:
+      - ${DATA_ROOT}/config/jellyfin:/config:z
+      - ${DATA_ROOT}/media:/media:z
+      - ${DATA_ROOT}/torrents:/torrents:ro,z
+
+  # ---------------------------------------------------------------------------
+  # Descubrimiento y peticiones
+  # ---------------------------------------------------------------------------
+  seerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: seerr
+    restart: unless-stopped
+    networks:
+      - multimedia-net
+    ports:
+      - "${SEERR_PORT}:5055"
+    environment:
+      - LOG_LEVEL=info
+      - TZ=${TZ}
+    volumes:
+      - ${DATA_ROOT}/config/seerr:/app/config:z
+
+  # ---------------------------------------------------------------------------
+  # Gestores automatizados de bibliotecas
+  # ---------------------------------------------------------------------------
+  sonarr:
+    <<: *arr-common
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    ports:
+      - "${SONARR_PORT}:8989"
+    volumes:
+      - ${DATA_ROOT}/config/sonarr:/config:z
+      - ${DATA_ROOT}/torrents:/downloads:z
+      - ${DATA_ROOT}/media/tv:/tv:z
+
+  radarr:
+    <<: *arr-common
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    ports:
+      - "${RADARR_PORT}:7878"
+    volumes:
+      - ${DATA_ROOT}/config/radarr:/config:z
+      - ${DATA_ROOT}/torrents:/downloads:z
+      - ${DATA_ROOT}/media/movies:/movies:z
+
+  lidarr:
+    <<: *arr-common
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    ports:
+      - "${LIDARR_PORT}:8686"
+    volumes:
+      - ${DATA_ROOT}/config/lidarr:/config:z
+      - ${DATA_ROOT}/torrents:/downloads:z
+      - ${DATA_ROOT}/media/music:/music:z
+
+  readarr:
+    <<: *arr-common
+    # Readarr está archivado por upstream; la imagen `latest` ya no se publica.
+    # Pin a la última build conocida (0.4.18-develop). Si falla, probar
+    # `0.4.19-nightly` o cambiar a `ghcr.io/hotio/readarr`.
+    image: lscr.io/linuxserver/readarr:0.4.18-develop
+    container_name: readarr
+    ports:
+      - "${READARR_PORT}:8787"
+    volumes:
+      - ${DATA_ROOT}/config/readarr:/config:z
+      - ${DATA_ROOT}/torrents:/downloads:z
+      - ${DATA_ROOT}/media/books:/books:z
+
+  # ---------------------------------------------------------------------------
+  # Subtítulos
+  # ---------------------------------------------------------------------------
+  bazarr:
+    <<: *arr-common
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    ports:
+      - "${BAZARR_PORT}:6767"
+    volumes:
+      - ${DATA_ROOT}/config/bazarr:/config:z
+      - ${DATA_ROOT}/media:/media:z
+
+  # ---------------------------------------------------------------------------
+  # Indexadores + evasión de Cloudflare
+  # ---------------------------------------------------------------------------
+  jackett:
+    <<: *arr-common
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: jackett
+    ports:
+      - "${JACKETT_PORT}:9117"
+    volumes:
+      - ${DATA_ROOT}/config/jackett:/config:z
+      - ${DATA_ROOT}/torrents:/downloads:z
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    networks:
+      - multimedia-net
+    # IMPORTANTE: NO se publica ningún puerto al host. Solo accesible desde la
+    # red interna `multimedia-net` a través de http://flaresolverr:8191.
+    environment:
+      - LOG_LEVEL=info
+      - TZ=${TZ}
+    volumes:
+      - ${DATA_ROOT}/config/flaresolverr:/config:z
+
+  # ---------------------------------------------------------------------------
+  # Monitoreo
+  # ---------------------------------------------------------------------------
+  tracearr:
+    image: ghcr.io/connorgallopo/tracearr:latest
+    container_name: tracearr
+    restart: unless-stopped
+    networks:
+      - multimedia-net
+    ports:
+      - "${TRACEARR_PORT}:3000"
+    environment:
+      - TZ=${TZ}
+      # Configurar en la UI de Tracearr la primera vez; los claim tokens del
+      # .env se inyectan como variables que Tracearr lee al arrancar.
+      - JELLYFIN_URL=http://jellyfin:8096
+      - SONARR_URL=http://sonarr:8989
+    volumes:
+      - ${DATA_ROOT}/config/tracearr:/app/config:z
+
+# =============================================================================
+# Red interna compartida por todos los servicios. Los hostname entre
+# contenedores se resuelven por nombre de servicio (ej. `http://jackett:9117`).
+# =============================================================================
+networks:
+  multimedia-net:
+    driver: bridge
+    name: multimedia-net

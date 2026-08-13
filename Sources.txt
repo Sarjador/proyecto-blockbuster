@@ -1,0 +1,62 @@
+aMule: Su sitio oficial de documentación es http://wiki.amule.org/wiki/AMule.
+Bazarr: El sitio web principal es https://www.bazarr.media/, y su repositorio en GitHub se encuentra en https://github.com/morpheus65535/bazarr.
+FlareSolverr: El código fuente y la documentación están en https://github.com/FlareSolverr/FlareSolverr.
+Jackett: Puedes encontrar el repositorio de este proxy de indexadores en https://github.com/Jackett/Jackett.
+Lidarr: El sitio oficial para la gestión de música es https://lidarr.audio/, y su GitHub es https://github.com/Lidarr/Lidarr.
+Radarr: La web oficial para películas es https://radarr.video/, y el repositorio es https://github.com/Radarr/Radarr.
+Readarr: El sitio para la gestión de libros es https://readarr.com/, y su repositorio (actualmente archivado) es https://github.com/Readarr/Readarr.
+Sonarr: El sitio principal para series de TV es https://sonarr.tv/, y su GitHub está en https://github.com/Sonarr/Sonarr.
+Tracearr: Esta herramienta de monitoreo tiene su web en https://tracearr.com/ y su repositorio en https://github.com/connorgallopo/Tracearr.
+Jellyfin: El centro de medios tiene su web oficial en https://jellyfin.org/ y su repositorio principal en https://github.com/jellyfin/jellyfin.
+Seerr: El gestor de peticiones y descubrimiento tiene su sitio en https://seerr.dev/ y su repositorio en https://github.com/seerr-team/seerr.
+Video de YouTube: El video del canal Pelado Nerd se titula "Jellyfin + Radarr + Sonarr 100% AUTOMATIZADO [PARTE 1]".
+
+
+Estas fuentes describen un ecosistema de aplicaciones diseñadas para la gestión automatizada de bibliotecas multimedia. Herramientas como Radarr y Lidarr se encargan de organizar, descargar y mejorar la calidad de colecciones de cine y música, mientras que Bazarr complementa este proceso gestionando subtítulos de forma automática. Por su parte, Jackett actúa como un puente técnico que permite a estos programas buscar contenido en múltiples rastreadores de torrents de manera simultánea. Finalmente, la plataforma Tracearr ofrece un panel centralizado para monitorear en tiempo real la reproducción y el uso de servidores como Plex o Jellyfin. En conjunto, estos recursos permiten a los usuarios automatizar la obtención de archivos, optimizar metadatos y supervisar el consumo de medios con mínima intervención manual.
+
+Para montar un ecosistema completo en Podman que supere la propuesta inicial del YouTuber y cubra todas las facetas de una biblioteca digital (películas, series, música, libros, subtítulos y monitoreo), deberías estructurar un stack que utilice podman-compose y siga una estrategia de volumen compartido para maximizar el rendimiento.
+A continuación, detallo los componentes esenciales para la imagen más completa posible y las claves para su configuración:
+1. El Núcleo: Servidor de Medios y Descubrimiento
+
+    Jellyfin: La pieza central para reproducir contenido. Es totalmente gratuito y no tiene funciones bloqueadas tras pagos.
+    Seerr: Es fundamental para una "biblioteca completa". Permite descubrir contenido nuevo (tendencias, recomendaciones) y gestionar peticiones de usuarios de forma sencilla, integrándose directamente con Radarr y Sonarr.
+
+2. Automatización Total (Ecosistema "Arr")
+Para cubrir todas las categorías de medios, debes incluir:
+
+    Sonarr: Gestión de series de TV.
+    Radarr: Gestión de películas.
+    Lidarr: Gestión de colecciones de música.
+    Bazarr: Imprescindible para el stack completo; busca y descarga subtítulos automáticamente basándose en la base de datos de Sonarr y Radarr.
+    Readarr: Para libros electrónicos y audiolibros. Nota: Los desarrolladores anunciaron su retiro recientemente por problemas de metadatos, pero sugieren alternativas como el mirror rreading-glasses.
+
+3. Indexación y Evasión de Bloqueos
+
+    Jackett: Actúa como proxy para traducir consultas de tus apps a cientos de trackers de torrents.
+    FlareSolverr: Muchas webs de indexación usan protección de Cloudflare. Este servidor proxy permite a Jackett saltarse estos desafíos anti-bot.
+
+4. Monitoreo Avanzado
+
+    Tracearr: Mientras el YouTuber mencionaba la falta de estadísticas en Jellyfin, Tracearr ofrece un panel unificado para monitorizar en tiempo real quién está viendo qué, analizar el uso de ancho de banda y detectar si se están compartiendo cuentas indebidamente.
+
+Configuración Técnica para Podman
+Para que este stack sea eficiente y evite los errores comunes documentados en las fuentes, sigue estas reglas:
+
+    Uso de Hard Links (Volumen Único): El mayor error en contenedores es separar /downloads de /media. Debes mapear un único volumen raíz (ej. /data) para que todas las apps compartan el mismo sistema de archivos interno. Esto permite que, al terminar una descarga, el archivo se mueva instantáneamente (movimiento atómico) sin copiar datos ni duplicar espacio.
+        Estructura recomendada: /data/torrents, /data/media/movies, /data/media/tv, etc.
+    Podman Compose: Dado que Podman es compatible con las especificaciones de Docker, puedes usar un archivo docker-compose.yml para levantar todo el conjunto.
+    Seguridad: FlareSolverr no debe exponerse a internet, ya que puede ser abusado; mantenlo solo accesible internamente dentro de la red del contenedor.
+    Variables de Entorno: Utiliza un archivo .env para centralizar las rutas de tus directorios y las API Keys de cada servicio, facilitando la replicación en diferentes servidores.
+
+Resumen del Stack Completo:
+
+Categoría - Aplicación Recomendada
+Streaming - Jellyfin
+Peticiones/Descubrimiento - Seerr
+Series - Sonarr
+Películas - Radarr
+Música - Lidarr
+Libros - Readarr (con mirror de metadatos rreading-glasses)
+Subtítulos - Bazarr
+Indexación - Jackett + FlareSolverr
+Monitoreo - Tracearr
