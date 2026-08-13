@@ -338,3 +338,8 @@ Con `DATA_ROOT=/mnt/f/Videos` y la estructura `Peliculas/Series/Anime/...`:
   `podman exec -u root <servicio> rm /arr-data/Peliculas/...`.
 - **Claim tokens de Tracearr**: Tracearr usa `JELLYFIN_URL=http://jellyfin:8096`
   internamente. Funciona aunque la URL externa sea `http://localhost:8096`.
+- **Jellyfin URL en Seerr/Jellyseerr**: usa SIEMPRE `http://jellyfin:8096` (hostname
+  interno de la red `multimedia-net`), **NO** `http://localhost:8096`. Desde
+  dentro del contenedor Seerr, `localhost` apunta al propio Seerr, no a
+  Jellyfin. Igual aplica para Sonarr/Radarr/Lidarr/Readarr: usa siempre los
+  nombres internos (`http://sonarr:8989`, `http://radarr:7878`, etc.).
