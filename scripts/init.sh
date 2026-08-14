@@ -65,6 +65,8 @@ SERVICES=(
     "config/flaresolverr"
     "config/qbittorrent"
     "config/tracearr"
+    "config/redis"
+    "config/postgres"
 )
 
 echo "📁 Creando estructura bajo ${DATA_ROOT} ..."
