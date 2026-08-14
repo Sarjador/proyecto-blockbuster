@@ -280,6 +280,116 @@ Las fuentes consultadas para construir este stack están en [`Sources.txt`](Sour
 
 ---
 
+## 12. Acceso remoto (LAN, Tailscale, VPN)
+
+Por defecto, los servicios solo son accesibles desde `localhost` del host donde
+corre podman. Para acceder desde otros dispositivos (TV, móvil, otro PC en la
+red local o vía Tailscale) hay que exponer los puertos. El procedimiento
+depende de si el host es **Linux nativo** o **Windows 10/11 con WSL2**.
+
+### Caso A — Host Linux nativo (recomendado para servidores)
+
+En Linux, podman-compose expone los puertos directamente en `0.0.0.0` del host
+(la IP de la LAN). **No hace falta port forwarding**, solo abrir el firewall:
+
+```bash
+sudo ./scripts/setup-lan-access.sh
+```
+
+El script detecta automáticamente si usas `firewalld` (RHEL/Fedora) o `ufw`
+(Ubuntu/Debian) y abre los puertos TCP del stack más UDP 6881 (BitTorrent).
+Idempotente — se puede correr varias veces sin problema.
+
+Verifica que los puertos están escuchando en todas las interfaces:
+
+```bash
+ss -tlnp | grep -E ':(8096|8989|7878|9117|9080)\b'
+# Debe mostrar 0.0.0.0:PUERTO (no solo 127.0.0.1)
+```
+
+### Caso B — Windows 10/11 con podman-machine (WSL2)
+
+En W10, `podman` corre en una VM WSL2 (`podman-machine-default`) con IP
+interna `172.19.x.x`. Los containers exponen puertos a esa VM, pero **Windows
+no los reenvía automáticamente** a las IPs externas (LAN, Tailscale). Sin
+configuración adicional, solo se puede acceder desde el propio W10 vía
+`localhost`.
+
+Solución: configurar **port forwarding** desde Windows hacia la WSL2 VM y
+abrir los puertos en el firewall de Windows.
+
+#### Procedimiento
+
+1. **Ejecutar como Administrador** (PowerShell):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\setup-lan-access.ps1
+   ```
+   El script se auto-eleva con UAC si no estás en admin. Detecta la IP de
+   la WSL2 VM y crea las reglas de `netsh interface portproxy` y de
+   `Windows Firewall` para todos los puertos del stack.
+
+2. **Verificar acceso** desde el propio W10:
+   ```powershell
+   curl http://<TU-IP-LAN>:8096   # sustituye por tu IP LAN
+   # Debe devolver HTTP 302 (redirect al login de Jellyfin)
+   ```
+
+3. **Probar desde otro dispositivo**:
+   - TV / móvil en la misma Wi-Fi → abre `http://<IP-LAN>:8096`
+   - Dispositivo en Tailscale → abre `http://<IP-Tailscale>:8096`
+
+#### ⚠️ El problema de la IP dinámica de WSL2
+
+La IP `172.19.x.x` del WSL2 VM **puede cambiar tras cada restart** de WSL2.
+Cuando cambia, las reglas de portproxy quedan apuntando a la IP vieja y dejan
+de funcionar.
+
+Tres opciones para mantenerlo estable:
+
+| Solución | Dificultad | Recomendación |
+|---|---|---|
+| **Re-ejecutar el script** tras cada restart | Trivial | Para setups pequeños / experimentales |
+| **Task Scheduler** que detecte WSL2 boot y corra el script | Media | Para setups semi-estables |
+| **Instalar Tailscale dentro del WSL2 VM** y usar la IP de Tailscale (estable) como destino del portproxy | Media-alta | **Recomendada** para setups 24/7 |
+
+La opción recomendada (Tailscale en WSL2) da además una IP de Tailscale
+dentro de la VM que es estable entre reinicios, ideal para acceso remoto
+desde cualquier parte del mundo sin abrir puertos en el router.
+
+#### Instalación rápida de Tailscale en WSL2
+
+```bash
+podman machine ssh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+
+Una vez dentro de la red Tailscale, los containers son accesibles vía
+`http://<tailscale-ip-wsl2>:<puerto>` desde cualquier dispositivo Tailscale
+(sea de la LAN o no), **incluso desde fuera de casa**.
+
+#### Limitación: BitTorrent UDP 6881
+
+`netsh interface portproxy` solo soporta TCP. El tráfico BitTorrent UDP en
+puerto 6881 **no se puede reenviar** desde Windows a WSL2 vía portproxy.
+
+Alternativas para W10:
+- Configurar qBittorrent para usar **solo TCP** (Tools → Options →
+  Connection → "Use UDP trackers": desmarca "Enable UDP tracker support")
+- O instalar Tailscale en la VM y exponer 6881/UDP vía una regla de
+  firewall en WSL2 directamente
+
+### Tabla resumen
+
+| Host | Acceso LAN | Acceso Tailscale | Acceso desde Internet |
+|---|---|---|---|
+| Linux nativo | ✅ directo tras `setup-lan-access.sh` | ✅ si Tailscale en host | Requiere port-forward en router |
+| W10 + WSL2 | ⚠️ requiere `setup-lan-access.ps1` + re-ejecutar tras restart | ✅ tras setup o vía Tailscale en WSL2 | Igual + Tailscale funciona fuera |
+
+---
+
+---
+
 ## 11. Despliegue en Windows 10/11 (probado en este repo)
 
 Esta sección documenta el caso real probado en W10 + `podman-machine-default`
