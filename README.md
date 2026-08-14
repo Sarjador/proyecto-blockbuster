@@ -167,8 +167,16 @@ mounts.
 | Readarr | `${READARR_PORT}:8787` |
 | Bazarr | `${BAZARR_PORT}:6767` |
 | Jackett | `${JACKETT_PORT}:9117` |
-| qBittorrent | `${QBITTORRENT_PORT}:8080` + `6881/tcp` + `6881/udp` |
+| qBittorrent | `${QBITTORRENT_PORT}:${QBITTORRENT_PORT}` + `6881/tcp` + `6881/udp` |
 | Tracearr | `${TRACEARR_PORT}:3000` |
+
+> **Gotcha de qBittorrent v5**: valida estrictamente que el puerto del `Host`
+> header coincida con su puerto interno. Si mapeas `9080:8080`, el navegador
+> envía `Host: localhost:9080` pero qBittorrent escucha en `8080` → **rechaza
+> TODAS las peticiones con 401** sin mostrar el formulario de login. El
+> compose usa `${QBITTORRENT_PORT}:${QBITTORRENT_PORT}` para que ambos lados
+> coincidan. Si necesitas un puerto distinto al 8080, **no cambies solo el
+> host**; asegúrate de que `WEBUI_PORT` y el mapping usen el mismo número.
 | **FlareSolverr** | **no publicado** (solo red interna) |
 
 Ajusta los valores en el `.env` si tu host tiene algún conflicto.
