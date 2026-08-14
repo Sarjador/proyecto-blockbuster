@@ -481,7 +481,7 @@ Con `DATA_ROOT=/mnt/f/Videos` y la estructura `Peliculas/Series/Anime/...`:
 | Jellyfin accesible desde W10 en `localhost:8096` | HTTP 302 (wizard inicial) |
 | Hard link NTFS entre `torrents/` y `media/` | ❌ no soportado por v9fs/DrvFS |
 
-### 10.5. Limitaciones específicas de W10
+### 10.5. Limitaciones específicas de W10/W11
 
 - **Sin hard links reales**: cada download duplica el espacio hasta que
   limpias el torrent. Con 200 GB libres en `F:` y descargas típicas de

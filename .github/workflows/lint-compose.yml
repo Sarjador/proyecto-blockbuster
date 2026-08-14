@@ -1,0 +1,67 @@
+name: Lint compose
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+      - '.github/workflows/lint-compose.yml'
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 1. yamllint: sintaxis YAML y reglas de estilo (indentación, longitudes).
+      #    Captura errores de sintaxis y mantiene consistencia con el resto
+      #    del repo.
+      - name: yamllint
+        run: |
+          pip install --quiet yamllint
+          yamllint -d '{extends: default, rules: {line-length: {max: 200}, document-start: disable, truthy: {check-keys: false}, indentation: {spaces: 2, indent-sequences: true}}}' \
+            docker-compose.yml \
+            .env.example \
+            README.md \
+            .github/workflows/lint-compose.yml
+
+      # 2. docker compose config: validación semántica. Comprueba que el
+      #    compose es parseable, que las variables se resuelven, que los
+      #    servicios tienen imágenes válidas, etc.
+      - name: Validate docker-compose.yml
+        run: |
+          # Construir un .env mínimo para que $DATA_ROOT, $PUID, etc. se
+          # resuelvan al parsear. Solo se usa para validación, NO se commitea.
+          cat > .env <<'ENVEOF'
+          PUID=1000
+          PGID=1000
+          TZ=Europe/Madrid
+          DATA_ROOT=/tmp/multimedia-test
+          JELLYFIN_PORT=8096
+          SEERR_PORT=5055
+          SONARR_PORT=8989
+          RADARR_PORT=7878
+          LIDARR_PORT=8686
+          READARR_PORT=8787
+          BAZARR_PORT=6767
+          JACKETT_PORT=9117
+          TRACEARR_PORT=3000
+          QBITTORRENT_PORT=9080
+          JACKETT_URL=http://jackett:9117
+          FLARESOLVERR_URL=http://flaresolverr:8191
+          JELLYFIN_CLAIM_TOKEN=
+          SONARR_CLAIM_TOKEN=
+          TRACEARR_JWT_SECRET=please-change-me-in-prod-32chars-min
+          TRACEARR_DB_PASSWORD=changeme-postgres
+          READARR_METADATA_SOURCE=rreading-glasses
+          READARR_METADATA_URL=
+          ENVEOF
+
+          # `docker compose config` valida el archivo, resuelve variables y
+          # emite el compose normalizado. Si falla, el comando retorna
+          # exit != 0 y el workflow falla.
+          docker compose config --quiet
+          echo "OK: docker-compose.yml valida correctamente"
