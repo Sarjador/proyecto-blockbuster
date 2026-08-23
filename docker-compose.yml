@@ -244,9 +244,10 @@ services:
       - "${QBITTORRENT_PORT}:${QBITTORRENT_PORT}"
       # BitTorrent traffic. Si tu ISP filtra 6881, cambialo a otro (51413, etc.)
       # en la WebUI y en este docker-compose.yml simultaneamente, y actualiza
-      # tambien la regla de port forwarding del router.
-      - "6881:6881"
-      - "6881:6881/udp"
+      # tambien la regla de port forwarding del router y el portproxy de
+      # setup-lan-access.ps1.
+      - "${QBITTORRENT_BT_PORT}:${QBITTORRENT_BT_PORT}"
+      - "${QBITTORRENT_BT_PORT}:${QBITTORRENT_BT_PORT}/udp"
     volumes:
       - type: bind
         source: ${DATA_ROOT}/config/qbittorrent

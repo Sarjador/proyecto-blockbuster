@@ -117,13 +117,18 @@ foreach ($entry in $PORTS.GetEnumerator()) {
         connectport=$port | Out-Null
 }
 
-# qBittorrent BitTorrent 6881/TCP: portproxy hacia la VM (qBittorrent
-# esta en host network, pero eso en WSL2 + podman-machine significa que
-# vive en el namespace de red de la VM, no del host Windows. Por eso el
-# paquete que llega a Windows:6881 hay que reenviarlo a la VM).
-Write-Host '  + qBittorrent BT 6881/tcp (portproxy a VM)'
-netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=6881 connectaddress=$wslIp connectport=6881 | Out-Null
-# 6881/UDP no se puede portproxy-ar con netsh (limitación de Windows);
+# qBittorrent BitTorrent (puerto configurable via .env): portproxy hacia la VM.
+# Si tu ISP filtra 6881, define QBITTORRENT_BT_PORT en .env (ej. 46881),
+# actualiza tambien la regla de port forwarding del router y la WebUI del
+# propio qBittorrent.
+$qbtBtPort = if ($env:QBITTORRENT_BT_PORT) { $env:QBITTORRENT_BT_PORT } else { '6881' }
+Write-Host "  + qBittorrent BT ${qbtBtPort}/tcp (portproxy a VM)"
+netsh interface portproxy add v4tov4 `
+    listenaddress=0.0.0.0 `
+    listenport=$qbtBtPort `
+    connectaddress=$wslIp `
+    connectport=$qbtBtPort | Out-Null
+# ${qbtBtPort}/UDP no se puede portproxy-ar con netsh (limitación de Windows);
 # lo cubre solo la regla de Firewall de la sección 3.
 
 # --- 3. Abrir puertos en Windows Firewall ----------------------------------
@@ -149,21 +154,19 @@ foreach ($entry in $PORTS.GetEnumerator()) {
     Write-Host "  + Firewall: $name :$port (TCP)"
 }
 
-# qBittorrent BitTorrent traffic: TCP y UDP en 6881.
-# qBittorrent va en host network, asi que estos puertos los sirve el
-# contenedor directamente sobre las interfaces de Windows. NO hay portproxy
-# implicado.
+# qBittorrent BitTorrent traffic: TCP y UDP en el puerto configurado
+# en .env (QBITTORRENT_BT_PORT, default 6881). Cubre el BT del container.
 foreach ($proto in @('TCP', 'UDP')) {
-    $ruleName = "Proyecto-Blockbuster qBittorrent BT 6881 $proto"
+    $ruleName = "Proyecto-Blockbuster qBittorrent BT ${qbtBtPort} $proto"
     Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
     New-NetFirewallRule -DisplayName $ruleName `
         -Direction Inbound `
         -Protocol $proto `
-        -LocalPort 6881 `
+        -LocalPort $qbtBtPort `
         -Action Allow `
         -Profile Any `
         -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "  + Firewall: qBittorrent BT 6881 ($proto)"
+    Write-Host "  + Firewall: qBittorrent BT ${qbtBtPort} ($proto)"
 }
 
 Write-Host ''

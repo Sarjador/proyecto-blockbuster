@@ -49,4 +49,7 @@ openspec/changes/archive/
 .opencode/
 .mavis/
 /Sources.txt
+
+# Capturas de pantalla / imagenes temporales que el usuario deja para debug
+images/
 NUL
