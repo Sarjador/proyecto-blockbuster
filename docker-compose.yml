@@ -235,11 +235,22 @@ services:
   # Consecuencia práctica: como ya no hay port mapping, podman NO crea las
   # reglas de Firewall tipo "PB-6881". Hay que abrirlas a mano. El script
   # scripts/setup-lan-access.{sh,ps1} lo hace.
+  #
+  # NO usamos `<<: *arr-common` a propósito: ese anchor incluye
+  # `networks: [multimedia-net]`, y podman-compose rechaza un servicio que
+  # tenga `networks:` y `network_mode:` a la vez
+  # ("ValueError: networks and network_mode must not be present in the same
+  # service"). Inlineamos la config para evitarlo.
   # ---------------------------------------------------------------------------
   qbittorrent:
-    <<: *arr-common
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=${QBITTORRENT_PORT}
     network_mode: host
     volumes:
       - type: bind
@@ -248,8 +259,6 @@ services:
       - type: bind
         source: ${DATA_ROOT}/torrents
         target: /downloads
-    environment:
-      - WEBUI_PORT=${QBITTORRENT_PORT}
 
   # ---------------------------------------------------------------------------
   # Monitoreo

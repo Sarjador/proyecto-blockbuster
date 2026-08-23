@@ -31,10 +31,15 @@
       Jellyfin 8096, Seerr 5055, Sonarr 8989, Radarr 7878, Lidarr 8686,
       Readarr 8787, Bazarr 6767, Jackett 9117, Tracearr 3000,
       qBittorrent WebUI 9080 (NO 8080: qBittorrent v5 valida que el puerto
-      del Host header coincida con el interno).
-    BitTorrent traffic (6881 TCP+UDP): qBittorrent corre en host network,
-    asi que NO necesita portproxy hacia WSL2; solo necesita reglas de
-    Firewall en Windows para permitir el inbound.
+      del Host header coincida con el interno),
+      qBittorrent BitTorrent 6881 TCP (portproxy a WSL2 VM).
+    qBittorrent corre con network_mode: host, lo que en WSL2 + podman-machine
+    significa que esta en el namespace de red de la VM de Fedora (no en el
+    de Windows directamente). Por eso el 6881 SI necesita portproxy hacia
+    la IP actual de la VM; sin el, los paquetes que llegan a Windows:6881
+    no encuentran nada que escuche (qBittorrent esta en la VM, no en
+    Windows). NO se puede portproxy-ar UDP con netsh (limitación de
+    Windows); para UDP 6881 hay que abrir solo la regla de Firewall.
 #>
 
 # --- Auto-elevacion: si no corre como admin, re-lanzar con UAC --------------
@@ -106,10 +111,14 @@ foreach ($entry in $PORTS.GetEnumerator()) {
         connectport=$port | Out-Null
 }
 
-# NOTA: 6881 TCP+UDP (BitTorrent) NO se portproxy-ea. qBittorrent corre en
-# host network (network_mode: host en docker-compose.yml), asi que escucha
-# directamente en las interfaces del host Windows. Solo hay que abrir el
-# Firewall (seccion 3 mas abajo).
+# qBittorrent BitTorrent 6881/TCP: portproxy hacia la VM (qBittorrent
+# esta en host network, pero eso en WSL2 + podman-machine significa que
+# vive en el namespace de red de la VM, no del host Windows. Por eso el
+# paquete que llega a Windows:6881 hay que reenviarlo a la VM).
+Write-Host '  + qBittorrent BT 6881/tcp (portproxy a VM)'
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=6881 connectaddress=$wslIp connectport=6881 | Out-Null
+# 6881/UDP no se puede portproxy-ar con netsh (limitación de Windows);
+# lo cubre solo la regla de Firewall de la sección 3.
 
 # --- 3. Abrir puertos en Windows Firewall ----------------------------------
 Write-Host '[3/3] Abriendo puertos en Windows Firewall...' -ForegroundColor Cyan
