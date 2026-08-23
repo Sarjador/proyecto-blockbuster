@@ -30,8 +30,11 @@
     Puertos configurados (deben coincidir con .env):
       Jellyfin 8096, Seerr 5055, Sonarr 8989, Radarr 7878, Lidarr 8686,
       Readarr 8787, Bazarr 6767, Jackett 9117, Tracearr 3000,
-      qBittorrent 9080 (NO 8080: qBittorrent v5 valida que el puerto del
-      Host header coincida con el interno), 6881 TCP+UDP (BitTorrent).
+      qBittorrent WebUI 9080 (NO 8080: qBittorrent v5 valida que el puerto
+      del Host header coincida con el interno).
+    BitTorrent traffic (6881 TCP+UDP): qBittorrent corre en host network,
+    asi que NO necesita portproxy hacia WSL2; solo necesita reglas de
+    Firewall en Windows para permitir el inbound.
 #>
 
 # --- Auto-elevacion: si no corre como admin, re-lanzar con UAC --------------
@@ -103,10 +106,10 @@ foreach ($entry in $PORTS.GetEnumerator()) {
         connectport=$port | Out-Null
 }
 
-# qBittorrent BitTorrent traffic: TCP y UDP en 6881
-Write-Host '  + qBittorrent BitTorrent 6881/tcp y 6881/udp (relay)'
-netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=6881 connectaddress=$wslIp connectport=6881 | Out-Null
-# (UDP no se puede portproxy con netsh; ver seccion de troubleshooting)
+# NOTA: 6881 TCP+UDP (BitTorrent) NO se portproxy-ea. qBittorrent corre en
+# host network (network_mode: host en docker-compose.yml), asi que escucha
+# directamente en las interfaces del host Windows. Solo hay que abrir el
+# Firewall (seccion 3 mas abajo).
 
 # --- 3. Abrir puertos en Windows Firewall ----------------------------------
 Write-Host '[3/3] Abriendo puertos en Windows Firewall...' -ForegroundColor Cyan
@@ -131,16 +134,22 @@ foreach ($entry in $PORTS.GetEnumerator()) {
     Write-Host "  + Firewall: $name :$port (TCP)"
 }
 
-# qBittorrent BitTorrent UDP 6881
-Remove-NetFirewallRule -DisplayName 'Proyecto-Blockbuster qBittorrent BT UDP' -ErrorAction SilentlyContinue
-New-NetFirewallRule -DisplayName 'Proyecto-Blockbuster qBittorrent BT UDP' `
-    -Direction Inbound `
-    -Protocol UDP `
-    -LocalPort 6881 `
-    -Action Allow `
-    -Profile Any `
-    -ErrorAction SilentlyContinue | Out-Null
-Write-Host '  + Firewall: qBittorrent BT 6881 (UDP)'
+# qBittorrent BitTorrent traffic: TCP y UDP en 6881.
+# qBittorrent va en host network, asi que estos puertos los sirve el
+# contenedor directamente sobre las interfaces de Windows. NO hay portproxy
+# implicado.
+foreach ($proto in @('TCP', 'UDP')) {
+    $ruleName = "Proyecto-Blockbuster qBittorrent BT 6881 $proto"
+    Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName $ruleName `
+        -Direction Inbound `
+        -Protocol $proto `
+        -LocalPort 6881 `
+        -Action Allow `
+        -Profile Any `
+        -ErrorAction SilentlyContinue | Out-Null
+    Write-Host "  + Firewall: qBittorrent BT 6881 ($proto)"
+}
 
 Write-Host ''
 Write-Host '=== Resultado ===' -ForegroundColor Green

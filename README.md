@@ -265,6 +265,43 @@ lo borra de `/downloads/`. Cada download duplica el espacio temporalmente.
 - `podman compose stop <servicio>` y `podman compose rm <servicio>`.
 - Borrar `${DATA_ROOT}/config/<servicio>` para empezar de cero.
 
+### qBittorrent aparece como "Firewalled" en la WebUI
+Síntomas: la WebUI muestra el triángulo amarillo "Connection status:
+Firewalled", el log repite `UPnP/NAT-PMP port mapping failed: no router
+found`, y la velocidad de **subida** es muy inferior a la de descarga
+(p. ej. 5 MiB/s ↓ vs 50 KiB/s ↑).
+
+Causa: con `ports:` normales en docker-compose, el contenedor qBittorrent
+corre dentro de slirp4netns (rootless Podman sobre WSL2). El tráfico
+BitTorrent entrante tiene que cruzar **cuatro saltos NAT** (router →
+Windows Firewall → portproxy → WSL2 VM → slirp4netns → contenedor), y
+UPnP/SSDP multicast no atraviesa slirp4netns, así que qBittorrent no
+puede pedirle al router que abra el 6881.
+
+Solución: este repo usa `network_mode: host` para qBittorrent a propósito
+(ver el comentario sobre el servicio en `docker-compose.yml`). Con host
+network:
+- qBittorrent se enlaza directamente a las interfaces del host.
+- UPnP funciona: qBittorrent descubre el router y le pide el mapeo.
+- La cadena NAT se reduce a "router → host".
+
+Tras `podman-compose up -d`, asegúrate de:
+1. Haber abierto el Firewall de Windows para 6881 TCP+UDP. Lo hace el
+   script `scripts/setup-lan-access.ps1` (reglas `Proyecto-Blockbuster
+   qBittorrent BT 6881 TCP/UDP`).
+2. Activar UPnP en la WebUI de qBittorrent (Tools → Options → Connection
+   → ✅ Use UPnP/NAT-PMP) **y darle a Save** (abajo del todo).
+3. Verificar en el log que UPnP ahora sí mapea:
+   ```bash
+   podman exec qbittorrent grep -i "UPnP" /config/qBittorrent/logs/qbittorrent.log | tail -3
+   ```
+   Deberías ver líneas tipo `(I) UPnP/NAT-PMP port mapping succeded...`
+   en lugar de `failed`.
+
+Si tu ISP filtra puertos BitTorrent conocidos (algunos ISPs en España
+bloquean o limitan el 6881), cambia el Listening Port en la WebUI a
+algo no estándar como 51413 y vuelve a darle a Save.
+
 ### Podman-machine queda corrupto tras un upgrade (WSL2)
 Síntomas: `podman machine list` se cuelga, `wsl -d podman-machine-default
 -- echo "alive"` no responde, o `podman machine init` falla con

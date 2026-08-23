@@ -215,22 +215,32 @@ services:
 
   # ---------------------------------------------------------------------------
   # Cliente de torrents
+  #
+  # NOTA IMPORTANTE: usamos `network_mode: host` (no bridge + ports) a propósito.
+  # Con bridge + slirp4netns (rootless Podman sobre WSL2) las conexiones BT
+  # entrantes dependen de cuatro saltos NAT encadenados (router → Windows
+  # Firewall → portproxy → WSL2 VM → slirp4netns → contenedor) y basta que
+  # uno falle para que qBittorrent quede marcado como "Firewalled" aunque la
+  # regla de Firewall y el portproxy estén bien. Además, UPnP/SSDP multicast
+  # no atraviesa slirp4netns, así que qBittorrent no puede pedirle al router
+  # que abra el 6881 (log: "no router found").
+  #
+  # Con host network qBittorrent se enlaza directamente a las interfaces del
+  # host: UPnP funciona, los peers pueden conectar inbound y la cadena NAT
+  # se reduce a "router → host". Trade-off: el contenedor comparte la stack
+  # de red del host (sin aislamiento), pero para qBittorrent en una homelab
+  # es asumible. NO expongas aquí servicios que no quieras accesibles desde
+  # la LAN.
+  #
+  # Consecuencia práctica: como ya no hay port mapping, podman NO crea las
+  # reglas de Firewall tipo "PB-6881". Hay que abrirlas a mano. El script
+  # scripts/setup-lan-access.{sh,ps1} lo hace.
   # ---------------------------------------------------------------------------
   qbittorrent:
     <<: *arr-common
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
-    ports:
-      # IMPORTANTE: qBittorrent v5 valida estrictamente que el puerto del Host
-      # header coincida con su puerto interno. Si el host usa un puerto distinto
-      # al interno (ej. 9080:8080), rechaza TODAS las peticiones con 401
-      # "Invalid Host header, port mismatch" antes de validar credenciales.
-      # Por eso mapeamos el MISMO puerto en host y contenedor.
-      - "${QBITTORRENT_PORT}:${QBITTORRENT_PORT}"
-      # BitTorrent traffic (recomendado mapearlos a fijos; cámbialos si tu ISP
-      # los filtra).
-      - "6881:6881"
-      - "6881:6881/udp"
+    network_mode: host
     volumes:
       - type: bind
         source: ${DATA_ROOT}/config/qbittorrent
