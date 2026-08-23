@@ -73,7 +73,11 @@ $PORTS = @{
 # --- 1. Detectar la IP del WSL2 VM ------------------------------------------
 Write-Host '[1/3] Detectando IP del WSL2 VM (podman-machine)...' -ForegroundColor Cyan
 
-$wslIp = wsl --exec ip -4 addr show eth0 2>&1 |
+# IMPORTANTE: usar 'wsl -d podman-machine-default -- ip ...' (no 'wsl --exec ip ...').
+# 'wsl --exec' corre en la distro por defecto de WSL, que puede ser otra
+# (p. ej. Ubuntu, docker-desktop) y no es podman-machine. '-d' fuerza la distro
+# correcta independientemente de cual sea la default.
+$wslIp = wsl -d podman-machine-default -- ip -4 addr show eth0 2>&1 |
     Select-String -Pattern 'inet (\d+\.\d+\.\d+\.\d+)' |
     ForEach-Object { ($_.Matches[0].Groups[1].Value) } |
     Select-Object -First 1
@@ -81,6 +85,8 @@ $wslIp = wsl --exec ip -4 addr show eth0 2>&1 |
 if (-not $wslIp) {
     Write-Host 'ERROR: no se pudo detectar la IP del WSL2 VM.' -ForegroundColor Red
     Write-Host 'Asegurate de que podman-machine esta corriendo: podman machine list' -ForegroundColor Red
+    Write-Host "Tampoco funciono 'wsl -d podman-machine-default -- ip ...'. Si tu distro" -ForegroundColor Red
+    Write-Host "de WSL no tiene el comando 'ip', prueba 'podman machine ssh -- ip -4 addr show eth0'." -ForegroundColor Red
     exit 1
 }
 Write-Host "  -> WSL2 IP: $wslIp" -ForegroundColor Green
