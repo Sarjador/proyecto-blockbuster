@@ -255,8 +255,21 @@ services:
       - type: bind
         source: ${DATA_ROOT}/torrents
         target: /downloads
+      # Init script: al primer arranque del container, si el config no
+      # existe aun, se siembra con las preferencias de descubrimiento de
+      # peers definidas en .env (DHT/PeX/LSD/UPnP). En arranques
+      # posteriores (cuando el config ya existe), el script no hace nada
+      # para no pisar la configuracion que el usuario haya tuneado.
+      - type: bind
+        source: ./scripts/qbittorrent-init.sh
+        target: /custom-cont-init.d/10-qbittorrent-init.sh
+        read_only: true
     environment:
       - WEBUI_PORT=${QBITTORRENT_PORT}
+      - QBITTORRENT_DHT_ENABLED=${QBITTORRENT_DHT_ENABLED:-false}
+      - QBITTORRENT_PEX_ENABLED=${QBITTORRENT_PEX_ENABLED:-false}
+      - QBITTORRENT_LSD_ENABLED=${QBITTORRENT_LSD_ENABLED:-false}
+      - QBITTORRENT_UPNP_ENABLED=${QBITTORRENT_UPNP_ENABLED:-false}
 
   # ---------------------------------------------------------------------------
   # Monitoreo

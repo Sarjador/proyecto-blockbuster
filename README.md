@@ -78,9 +78,61 @@ listados abajo son los valores por defecto).
 | Readarr | http://localhost:8787 | Idem con Jackett + mirror `rreading-glasses` (ver §5). |
 | Bazarr | http://localhost:6767 | Conectar con Sonarr y Radarr por API. |
 | Jackett | http://localhost:9117 | Añadir indexadores. |
-| qBittorrent | http://localhost:8080 | Cliente torrent. User/pass por defecto `admin` / `adminadmin` (cambia al primer login). |
+| qBittorrent | http://localhost:9080 | Cliente torrent. User/pass por defecto `admin` / `adminadmin` (cambia al primer login). **Importante**: revisa la sección §"Activación de descubrimiento de peers en qBittorrent" abajo. |
 | Tracearr | http://localhost:3000 | Ver §4 para los claim tokens. |
 | FlareSolverr | **no acceso web** | Se configura automáticamente en Jackett. |
+
+### Activación de descubrimiento de peers en qBittorrent
+
+La imagen `linuxserver/qBittorrent` **no acepta variables de entorno**
+para DHT, PeX, LSD ni UPnP. Estos ajustes solo se pueden configurar de
+dos formas:
+
+**A. Variables en `.env` (recomendado para el primer arranque)**
+
+Este repo incluye un init script (`scripts/qbittorrent-init.sh`) que se
+monta automáticamente en el container y, **solo la primera vez** (cuando
+`/config/qBittorrent/qBittorrent.conf` no existe), siembra esas
+preferencias a partir de:
+
+```ini
+QBITTORRENT_DHT_ENABLED=true
+QBITTORRENT_PEX_ENABLED=true
+QBITTORRENT_LSD_ENABLED=true
+QBITTORRENT_UPNP_ENABLED=true
+```
+
+Para activarlas de verdad, **borra el config y recrea el container**:
+
+```bash
+# OJO: esto borra la configuracion de qBittorrent (incluidos torrents
+# añadidos y categorias). Haz backup antes si te importa.
+rm -rf ${DATA_ROOT}/config/qbittorrent/*
+podman-compose up -d qbittorrent
+```
+
+Tras el primer arranque, el init script se desactiva (no pisa cambios
+posteriores). Si después quieres tocar DHT/PeX/LSD/UPnP, hazlo desde
+la WebUI.
+
+**B. Manual desde la WebUI (para cambios posteriores)**
+
+`Tools → Options → Connection`. Marca las casillas que quieras y dale a
+**Save** (abajo del todo):
+
+- ✅ **Enable DHT (decentralized network) to find more peers**
+- ✅ **Enable Peer Exchange (PeX) to find more peers**
+- ✅ **Enable Local Peer Discovery (LSD) to find more peers**
+- ✅ **Enable UPnP / NAT-PMP port forwarding from my router**
+
+**¿Cuándo activar cada uno?**
+
+| Ajuste | Recomendado si... | No recomendado si... |
+|---|---|---|
+| DHT | trackers caídos o torrents sin trackers | solo usas trackers privados fiables |
+| PeX | casi siempre (descubre pares via otros pares) | nunca realmente |
+| LSD | compartes LAN con otros usuarios | no compartes LAN |
+| UPnP | host Linux nativo y quieres abrir puertos sin tocar el router a mano | CGNAT (no funciona), WSL2/rootless Podman (no funciona por multicast) |
 
 ### Conectar Sonarr → Jackett
 
