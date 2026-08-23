@@ -1,7 +1,7 @@
 # =============================================================================
 # Proyecto-Blockbuster — stack multimedia unificado
-# Levantable con:  podman-compose up -d
-# Compatible con la spec Compose 3.8 (soporte verificado de podman-compose).
+# Levantable con:  podman-compose up -d  (o `podman-compose up -d`)
+# Spec Compose actual (sin atributo `version`, que está obsoleto).
 #
 # Estructura de DATA_ROOT esperada (ver README §"Estructura del host"):
 #   ${DATA_ROOT}/torrents/        # zona de staging para descargas
@@ -16,8 +16,6 @@
 # padre y cada *Arr se configura en su UI con "Root Folders" apuntando a
 # los subdirectorios reales. Ver README §"Adaptación a contenido existente".
 # =============================================================================
-
-version: "3.8"
 
 # Valores comunes para los servicios LinuxServer (*Arr, Bazarr, Jackett).
 x-arr-common: &arr-common
@@ -46,13 +44,23 @@ services:
       - TZ=${TZ}
       - JELLYFIN_PublishedServerUrl=http://localhost:${JELLYFIN_PORT}
     volumes:
-      - ${DATA_ROOT}/config/jellyfin:/config:z
+      # Sintaxis larga para evitar que podman-compose en Windows interprete
+      # los dos puntos de F:/ como separador de un volumen corto.
+      - type: bind
+        source: ${DATA_ROOT}/config/jellyfin
+        target: /config
       # DATA_ROOT contiene la biblioteca completa (Peliculas, Series, Anime,
       # Hanime, Otros, Documentales). Jellyfin escanea la raíz y configura
       # una biblioteca por subcarpeta. Read-only para que Jellyfin no
       # modifique tu colección.
-      - ${DATA_ROOT}:/media:ro,z
-      - ${DATA_ROOT}/torrents:/torrents:ro,z
+      - type: bind
+        source: ${DATA_ROOT}
+        target: /media
+        read_only: true
+      - type: bind
+        source: ${DATA_ROOT}/torrents
+        target: /torrents
+        read_only: true
 
   # ---------------------------------------------------------------------------
   # Descubrimiento y peticiones
@@ -69,7 +77,9 @@ services:
       - LOG_LEVEL=info
       - TZ=${TZ}
     volumes:
-      - ${DATA_ROOT}/config/seerr:/app/config:z
+      - type: bind
+        source: ${DATA_ROOT}/config/seerr
+        target: /app/config
 
   # ---------------------------------------------------------------------------
   # Gestores automatizados de bibliotecas
@@ -89,9 +99,15 @@ services:
     ports:
       - "${SONARR_PORT}:8989"
     volumes:
-      - ${DATA_ROOT}/config/sonarr:/config:z
-      - ${DATA_ROOT}/torrents:/downloads:z
-      - ${DATA_ROOT}:/arr-data:z
+      - type: bind
+        source: ${DATA_ROOT}/config/sonarr
+        target: /config
+      - type: bind
+        source: ${DATA_ROOT}/torrents
+        target: /downloads
+      - type: bind
+        source: ${DATA_ROOT}
+        target: /arr-data
 
   radarr:
     <<: *arr-common
@@ -100,9 +116,15 @@ services:
     ports:
       - "${RADARR_PORT}:7878"
     volumes:
-      - ${DATA_ROOT}/config/radarr:/config:z
-      - ${DATA_ROOT}/torrents:/downloads:z
-      - ${DATA_ROOT}:/arr-data:z
+      - type: bind
+        source: ${DATA_ROOT}/config/radarr
+        target: /config
+      - type: bind
+        source: ${DATA_ROOT}/torrents
+        target: /downloads
+      - type: bind
+        source: ${DATA_ROOT}
+        target: /arr-data
 
   lidarr:
     <<: *arr-common
@@ -111,9 +133,15 @@ services:
     ports:
       - "${LIDARR_PORT}:8686"
     volumes:
-      - ${DATA_ROOT}/config/lidarr:/config:z
-      - ${DATA_ROOT}/torrents:/downloads:z
-      - ${DATA_ROOT}:/arr-data:z
+      - type: bind
+        source: ${DATA_ROOT}/config/lidarr
+        target: /config
+      - type: bind
+        source: ${DATA_ROOT}/torrents
+        target: /downloads
+      - type: bind
+        source: ${DATA_ROOT}
+        target: /arr-data
 
   readarr:
     <<: *arr-common
@@ -125,9 +153,15 @@ services:
     ports:
       - "${READARR_PORT}:8787"
     volumes:
-      - ${DATA_ROOT}/config/readarr:/config:z
-      - ${DATA_ROOT}/torrents:/downloads:z
-      - ${DATA_ROOT}:/arr-data:z
+      - type: bind
+        source: ${DATA_ROOT}/config/readarr
+        target: /config
+      - type: bind
+        source: ${DATA_ROOT}/torrents
+        target: /downloads
+      - type: bind
+        source: ${DATA_ROOT}
+        target: /arr-data
 
   # ---------------------------------------------------------------------------
   # Subtítulos
@@ -139,8 +173,12 @@ services:
     ports:
       - "${BAZARR_PORT}:6767"
     volumes:
-      - ${DATA_ROOT}/config/bazarr:/config:z
-      - ${DATA_ROOT}:/media:z
+      - type: bind
+        source: ${DATA_ROOT}/config/bazarr
+        target: /config
+      - type: bind
+        source: ${DATA_ROOT}
+        target: /media
 
   # ---------------------------------------------------------------------------
   # Indexadores + evasión de Cloudflare
@@ -152,8 +190,12 @@ services:
     ports:
       - "${JACKETT_PORT}:9117"
     volumes:
-      - ${DATA_ROOT}/config/jackett:/config:z
-      - ${DATA_ROOT}/torrents:/downloads:z
+      - type: bind
+        source: ${DATA_ROOT}/config/jackett
+        target: /config
+      - type: bind
+        source: ${DATA_ROOT}/torrents
+        target: /downloads
 
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
@@ -167,7 +209,9 @@ services:
       - LOG_LEVEL=info
       - TZ=${TZ}
     volumes:
-      - ${DATA_ROOT}/config/flaresolverr:/config:z
+      - type: bind
+        source: ${DATA_ROOT}/config/flaresolverr
+        target: /config
 
   # ---------------------------------------------------------------------------
   # Cliente de torrents
@@ -188,8 +232,12 @@ services:
       - "6881:6881"
       - "6881:6881/udp"
     volumes:
-      - ${DATA_ROOT}/config/qbittorrent:/config:z
-      - ${DATA_ROOT}/torrents:/downloads:z
+      - type: bind
+        source: ${DATA_ROOT}/config/qbittorrent
+        target: /config
+      - type: bind
+        source: ${DATA_ROOT}/torrents
+        target: /downloads
     environment:
       - WEBUI_PORT=${QBITTORRENT_PORT}
 
@@ -203,7 +251,9 @@ services:
     networks:
       - multimedia-net
     volumes:
-      - ${DATA_ROOT}/config/redis:/data:z
+      - type: bind
+        source: ${DATA_ROOT}/config/redis
+        target: /data
     # Redis no expone puertos al host (solo accesible desde multimedia-net).
 
   postgres:
@@ -215,7 +265,7 @@ services:
     environment:
       - POSTGRES_DB=tracearr
       - POSTGRES_USER=tracearr
-      - POSTGRES_PASSWORD=${TRACEARR_DB_PASSWORD:-changeme-postgres}
+      - POSTGRES_PASSWORD=${TRACEARR_DB_PASSWORD}
       # PGDATA en un subdir del volumen named para evitar el error de
       # 'could not change permissions' que postgres da al inicializar
       # el data dir sobre NTFS/9P (WSL2).
@@ -246,17 +296,19 @@ services:
       - TZ=${TZ}
       # Tracearr usa PostgreSQL (no SQLite). El servicio 'postgres' arriba lo
       # provee; esta URL conecta con la DB 'tracearr' del usuario 'tracearr'.
-      - DATABASE_URL=postgresql://tracearr:${TRACEARR_DB_PASSWORD:-changeme-postgres}@postgres:5432/tracearr
+      - DATABASE_URL=postgresql://tracearr:${TRACEARR_DB_PASSWORD}@postgres:5432/tracearr
       # JWT_SECRET firma las sesiones; en producción genera uno con
       # 'openssl rand -hex 32'.
-      - JWT_SECRET=${TRACEARR_JWT_SECRET:-please-change-me-in-prod-32chars-min}
+      - JWT_SECRET=${TRACEARR_JWT_SECRET}
       # Redis para cache y rate limiting.
       - REDIS_URL=redis://redis:6379
       # URLs internas para conectar con los demás servicios.
       - JELLYFIN_URL=http://jellyfin:8096
       - SONARR_URL=http://sonarr:8989
     volumes:
-      - ${DATA_ROOT}/config/tracearr:/app/data:z
+      - type: bind
+        source: ${DATA_ROOT}/config/tracearr
+        target: /app/data
 
 # =============================================================================
 # Red interna compartida por todos los servicios. Los hostname entre

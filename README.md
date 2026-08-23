@@ -40,6 +40,14 @@ git clone <url> proyecto-blockbuster && cd proyecto-blockbuster
 cp .env.example .env
 $EDITOR .env       # ajustar PUID, PGID, TZ, DATA_ROOT y puertos si hace falta
 
+# ⚠️ Obligatorio: rellena TRACEARR_JWT_SECRET y TRACEARR_DB_PASSWORD.
+# En `.env.example` vienen VACÍOS a propósito (fail-fast seguro): si los
+# dejas así, Postgres y Tracearr NO arrancarán al hacer `up -d`. Genera
+# valores aleatorios con:
+#   openssl rand -hex 32   # para TRACEARR_JWT_SECRET (>=32 chars)
+#   openssl rand -hex 16   # para TRACEARR_DB_PASSWORD
+# y pégalos en el `.env` antes de continuar.
+
 # 3. Crear el árbol de directorios bajo ${DATA_ROOT} con permisos correctos
 ./scripts/init.sh
 
@@ -256,6 +264,123 @@ lo borra de `/downloads/`. Cada download duplica el espacio temporalmente.
 ### Quiero resetear un servicio
 - `podman compose stop <servicio>` y `podman compose rm <servicio>`.
 - Borrar `${DATA_ROOT}/config/<servicio>` para empezar de cero.
+
+### Podman-machine queda corrupto tras un upgrade (WSL2)
+Síntomas: `podman machine list` se cuelga, `wsl -d podman-machine-default
+-- echo "alive"` no responde, o `podman machine init` falla con
+`WSL_E_DISTRO_NOT_FOUND` / `ERROR_FILE_EXISTS`. Causa típica: la distro
+Fedora interna del podman-machine quedó en mal estado tras un upgrade
+mayor de Podman (5.x → 6.x) o de WSL2.
+
+Recovery paso a paso (Windows 10/11, **PowerShell como Administrador**):
+
+1. **Matar zombis y reiniciar el servicio WSL**:
+   ```powershell
+   Get-Process wslservice, wsl, wslhost -ErrorAction SilentlyContinue | Stop-Process -Force
+   Stop-Service LxssManager -Force
+   Start-Service LxssManager
+   wsl --list --verbose
+   ```
+2. **Borrar la distro y la metadata de Podman**:
+   ```powershell
+   wsl --unregister podman-machine-default
+   podman machine rm podman-machine-default -f
+   ```
+3. **Limpiar la basura que deja `wsl --unregister`** (instalación previa
+   en `%USERPROFILE%\.local\share\containers\podman\machine\wsl\`):
+   ```powershell
+   Remove-Item -Recurse -Force "$env:USERPROFILE\.local\share\containers\podman\machine\wsl\wsldist\podman-machine-default"
+   Remove-Item -Recurse -Force "$env:USERPROFILE\.local\share\containers\podman\machine\wsl\podman-machine-default"
+   Remove-Item -Recurse -Force "$env:USERPROFILE\.local\share\containers\podman\machine\wsl\podman-machine-default-amd64" -ErrorAction SilentlyContinue
+   ```
+   Si los pasos 2-3 siguen dando `ERROR_FILE_EXISTS`, queda una entrada
+   zombie en el registro de WSL:
+   ```powershell
+   $lxssKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss"
+   Get-ChildItem $lxssKey | ForEach-Object {
+       $props = Get-ItemProperty $_.PSPath
+       if ($props.DistributionName -eq "podman-machine-default") {
+           Remove-Item $_.PSPath -Recurse -Force
+       }
+   }
+   ```
+4. **Recrear la VM Fedora**:
+   ```powershell
+   podman machine init --now
+   podman machine list   # confirmar "Currently running"
+   ```
+5. **Relevantar el stack** (los bind mounts a `${DATA_ROOT}` siguen vivos):
+   ```powershell
+   cd F:\GITHUB_REPOS\Proyecto-Blockbuster
+   podman-compose up -d
+   ```
+
+Notas importantes:
+- Tu biblioteca en `${DATA_ROOT}` **no se pierde** (está fuera de la VM).
+- Los configs de los *Arr en `${DATA_ROOT}/config/<servicio>` **se conservan**.
+- El volumen named `tracearr-postgres` **se recrea vacío**; Tracearr
+  pedirá un `JELLYFIN_CLAIM_TOKEN` nuevo, pero el actual del `.env`
+  debería seguir siendo válido.
+- **No actualices Podman y WSL a la vez.** Haz uno, prueba, y luego el
+  otro.
+
+### `podman compose` delega a `docker-compose.exe` de Docker Desktop
+Síntoma: `podman compose up -d` muestra
+`Executing external compose provider "...\Docker\resources\bin\docker-compose.exe"`
+y falla con `EOF` al conectar al socket. Causa: Docker Desktop está
+instalado y su `docker-compose.exe` aparece en `PATH` antes que el compose
+nativo de Podman.
+
+Solución rápida (PowerShell como Admin):
+```powershell
+Move-Item "C:\Program Files\Docker\Docker\resources\bin\docker-compose.exe" "C:\Program Files\Docker\Docker\resources\bin\docker-compose.exe.bak"
+```
+Tras esto, `podman compose` usa su compose provider nativo. Para
+restaurar, renombra el `.bak` de vuelta.
+
+Solución definitiva: instalar `podman-compose` (Python):
+```powershell
+python -m pip install podman-compose
+```
+Y usar `podman-compose up -d` en lugar de `podman compose up -d`.
+
+### Jellyfin devuelve 503 "Service Unavailable" al arrancar
+Síntoma: `curl -I http://localhost:8096` devuelve `HTTP/1.1 503` con
+`Retry-After: 005` durante más de 5 minutos. Los logs muestran
+repetidamente `Health check StartupCheck with status Degraded` con mensaje
+`'Server is still starting up.'`.
+
+Causa típica: Jellyfin está ejecutando migraciones de base de datos
+bloqueadas (la `jellyfin.db` quedó en estado inconsistente tras un
+apagado forzoso o un upgrade). El puerto responde (Kestrel escucha) pero
+la app no termina de arrancar.
+
+Diagnóstico:
+```powershell
+podman logs jellyfin 2>&1 | Select-String -Pattern "Migration|error|Error|WARN" | Select-Object -Last 30
+```
+
+Fix A — esperar a la migración (si no hay errores):
+A veces tarda 10-15 min en escanear una biblioteca grande. Si los logs
+muestran progreso de escaneo, déjalo correr.
+
+Fix B — borrar la DB y empezar de cero (puedes perder configuración de
+bibliotecas):
+```powershell
+podman compose stop jellyfin
+# Desde Windows, ${DATA_ROOT}/config/jellyfin/data/jellyfin.db
+Remove-Item "${DATA_ROOT}\config\jellyfin\data\jellyfin.db"  # ajusta la ruta
+podman compose up -d jellyfin
+```
+Las bibliotecas configuradas se pierden y hay que volver a crearlas en la
+UI, pero las películas/series en `${DATA_ROOT}` siguen ahí.
+
+Fix C — recuperar desde un backup (si lo tenías):
+```powershell
+podman compose stop jellyfin
+Copy-Item ruta\backup\jellyfin.db "${DATA_ROOT}\config\jellyfin\data\jellyfin.db"
+podman compose up -d jellyfin
+```
 
 ---
 
