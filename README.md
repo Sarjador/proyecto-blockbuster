@@ -271,36 +271,46 @@ Firewalled", el log repite `UPnP/NAT-PMP port mapping failed: no router
 found`, y la velocidad de **subida** es muy inferior a la de descarga
 (p. ej. 5 MiB/s ↓ vs 50 KiB/s ↑).
 
-Causa: con `ports:` normales en docker-compose, el contenedor qBittorrent
-corre dentro de slirp4netns (rootless Podman sobre WSL2). El tráfico
-BitTorrent entrante tiene que cruzar **cuatro saltos NAT** (router →
-Windows Firewall → portproxy → WSL2 VM → slirp4netns → contenedor), y
-UPnP/SSDP multicast no atraviesa slirp4netns, así que qBittorrent no
-puede pedirle al router que abra el 6881.
+Causa: en este stack (rootless Podman sobre WSL2), UPnP/SSDP multicast
+NO atraviesa slirp4netns. Por tanto qBittorrent dentro del contenedor
+no puede pedirle al router que abra el 6881. La consecuencia es que los
+peers externos no pueden iniciar conexiones entrantes y qBittorrent se
+autocalifica como "Firewalled".
 
-Solución: este repo usa `network_mode: host` para qBittorrent a propósito
-(ver el comentario sobre el servicio en `docker-compose.yml`). Con host
-network:
-- qBittorrent se enlaza directamente a las interfaces del host.
-- UPnP funciona: qBittorrent descubre el router y le pide el mapeo.
-- La cadena NAT se reduce a "router → host".
+Probamos `network_mode: host` (commit revertido) y no es la solución:
+sí arregla UPnP pero rompe la resolución DNS de `qbittorrent` para los
+Arr (Radarr/Sonarr/etc. dejan de encontrar el download client).
 
-Tras `podman-compose up -d`, asegúrate de:
-1. Haber abierto el Firewall de Windows para 6881 TCP+UDP. Lo hace el
-   script `scripts/setup-lan-access.ps1` (reglas `Proyecto-Blockbuster
-   qBittorrent BT 6881 TCP/UDP`).
-2. Activar UPnP en la WebUI de qBittorrent (Tools → Options → Connection
-   → ✅ Use UPnP/NAT-PMP) **y darle a Save** (abajo del todo).
-3. Verificar en el log que UPnP ahora sí mapea:
-   ```bash
-   podman exec qbittorrent grep -i "UPnP" /config/qBittorrent/logs/qbittorrent.log | tail -3
-   ```
-   Deberías ver líneas tipo `(I) UPnP/NAT-PMP port mapping succeded...`
-   en lugar de `failed`.
+Solución: **port forwarding manual en el router**. Una sola vez.
+
+1. Entra al panel del router (`http://192.168.1.1`, `192.168.0.1` o la
+   que uses). Suele estar en "Port Forwarding", "NAT" o "Virtual
+   Server" (varía por marca: ASUS, Movistar HGU, Mikrotik, etc.).
+2. Crea regla(s):
+   - Externo `6881` TCP → interno `<IP-LAN-Windows>` (la de `ipconfig`,
+     p. ej. `<TU-IP-LAN>`) puerto `6881`
+   - Externo `6881` UDP → mismo destino
+3. Guarda y aplica.
+
+Tras esto, los peers externos llegan a `Windows:6881` y la cadena
+inbound funciona:
+```
+Internet → Router → Windows:6881
+  → portproxy (regla de setup-lan-access.ps1)
+  → WSL2 VM:6881
+  → rootlessport (docker-compose ports:)
+  → contenedor:6881 → qBittorrent
+```
+
+Espera 1-2 minutos y la WebUI pasará de "Firewalled" a "OK" en cuanto
+algún peer externo complete una conexión inbound. La velocidad de
+subida debería igualarse a la de descarga (o subir bastante).
 
 Si tu ISP filtra puertos BitTorrent conocidos (algunos ISPs en España
 bloquean o limitan el 6881), cambia el Listening Port en la WebUI a
-algo no estándar como 51413 y vuelve a darle a Save.
+algo no estándar como 51413. Si lo haces, recuerda actualizar también
+el `6881:6881` en `docker-compose.yml` y la regla de port forwarding
+del router para que apunte al nuevo puerto.
 
 ### Podman-machine queda corrupto tras un upgrade (WSL2)
 Síntomas: `podman machine list` se cuelga, `wsl -d podman-machine-default
