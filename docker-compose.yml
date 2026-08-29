@@ -340,6 +340,35 @@ services:
         source: ${DATA_ROOT}/config/tracearr
         target: /app/data
 
+  # ---------------------------------------------------------------------------
+  # autobrr — gestor automatico de descargas para trackers IRC y privados
+  # https://autobrr.com
+  # ---------------------------------------------------------------------------
+  autobrr:
+    image: ghcr.io/autobrr/autobrr:latest
+    container_name: autobrr
+    restart: unless-stopped
+    # El binario de autobrr requiere correr como UID/GID concretos; el
+    # entrypoint oficial usa 1000:1000 por defecto. Si tu DATA_ROOT esta
+    # montado con otro UID, cambia este valor para que coincida.
+    user: 1000:1000
+    # DNS externos: el gateway de slirp4netns (10.89.0.1) tiene el DNS
+    # proxy roto. Apuntamos a DNS publicos para resolver ghcr.io, trackers,
+    # etc. Si tu host Linux usa systemd-resolved, puedes omitir este bloque.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    networks:
+      - multimedia-net
+    ports:
+      - "${AUTOBRR_PORT}:7474"
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - type: bind
+        source: ${DATA_ROOT}/config/autobrr
+        target: /config
+
 # =============================================================================
 # Red interna compartida por todos los servicios. Los hostname entre
 # contenedores se resuelven por nombre de servicio (ej. `http://jackett:9117`).
