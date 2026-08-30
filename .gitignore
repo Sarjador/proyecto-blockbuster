@@ -53,3 +53,6 @@ openspec/changes/archive/
 # Capturas de pantalla / imagenes temporales que el usuario deja para debug
 images/
 NUL
+
+# Scripts de debug / one-off que el usuario crea para diagnosticar problemas
+scripts/add-milnueve-tracker.ps1
