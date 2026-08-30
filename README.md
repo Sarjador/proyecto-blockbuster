@@ -76,6 +76,7 @@ listados abajo son los valores por defecto).
 | Radarr | http://localhost:7878 | Idem con Jackett. |
 | Lidarr | http://localhost:8686 | Idem con Jackett. |
 | Readarr | http://localhost:8787 | Idem con Jackett + mirror `rreading-glasses` (ver §5). |
+| Whisparr | http://localhost:6969 | Fork de Sonarr para series/películas adultas. Misma config (Jackett + qBittorrent como download client). **Opcional**: solo si la necesitas. |
 | Bazarr | http://localhost:6767 | Conectar con Sonarr y Radarr por API. |
 | Jackett | http://localhost:9117 | Añadir indexadores. |
 | qBittorrent | http://localhost:9080 | Cliente torrent. User/pass por defecto `admin` / `adminadmin` (cambia al primer login). **Importante**: revisa la sección §"Activación de descubrimiento de peers en qBittorrent" abajo. |

@@ -164,6 +164,34 @@ services:
         target: /arr-data
 
   # ---------------------------------------------------------------------------
+  # Whisparr — fork de Sonarr para series/peliculas adultas
+  # https://github.com/Whisparr/Whisparr
+  # Misma estructura que Sonarr/Radarr: PUID/PGID del host, config bind
+  # mount, acceso al dir de torrents y al arbol de medios.
+  # ---------------------------------------------------------------------------
+  whisparr:
+    <<: *arr-common
+    # Whisparr v2 (fork de Sonarr) ya no tiene imagen oficial mantenida
+    # por linuxserver (devuelve 403). Usamos thespad/whisparr que es la
+    # build comunitaria mas mantenida actualmente. Si mas adelante sale
+    # una imagen oficial (v3 Radarr-based en ghcr.io requiere auth),
+    # cambiar a esa.
+    image: thespad/whisparr:latest
+    container_name: whisparr
+    ports:
+      - "${WHISPARR_PORT}:6969"
+    volumes:
+      - type: bind
+        source: ${DATA_ROOT}/config/whisparr
+        target: /config
+      - type: bind
+        source: ${DATA_ROOT}/torrents
+        target: /downloads
+      - type: bind
+        source: ${DATA_ROOT}
+        target: /arr-data
+
+  # ---------------------------------------------------------------------------
   # Subtítulos
   # ---------------------------------------------------------------------------
   bazarr:
