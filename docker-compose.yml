@@ -43,6 +43,14 @@ services:
     environment:
       - TZ=${TZ}
       - JELLYFIN_PublishedServerUrl=http://localhost:${JELLYFIN_PORT}
+      # Desactivar IPv6 en el runtime .NET. El container de Jellyfin en
+      # podman+WSL2 hereda solo ruta IPv4, pero los resolvers DNS devuelven
+      # registros AAAA primero para hosts como repo.jellyfin.org. HappyEyeballs
+      # intenta IPv6 -> Network is unreachable -> SocketException 11 (EAGAIN)
+      # -> "Resource temporarily unavailable". Forzando IPv4-only, el cliente
+      # HTTP cae a la ruta IPv4 que SÍ funciona (verificado con curl -4).
+      # Inocuo para todo lo que ya usa IPv4 (Jellyfin, plugins, metadatos).
+      - DOTNET_SYSTEM_NET_DISABLEIPV6=1
     volumes:
       # Sintaxis larga para evitar que podman-compose en Windows interprete
       # los dos puntos de F:/ como separador de un volumen corto.
@@ -396,6 +404,39 @@ services:
       - type: bind
         source: ${DATA_ROOT}/config/autobrr
         target: /config
+
+  # ---------------------------------------------------------------------------
+  # Threadfin — proxy IPTV (sucesor mantenido de xTeVe) [OPCIONAL]
+  # https://github.com/Threadfin/Threadfin
+  #
+  # Emula un sintonizador HDHomeRun para que Jellyfin pueda mostrar listas
+  # M3U y EPG (XMLTV) como "TV en directo" sin plugins externos.
+  #
+  # Servicio OPCIONAL: no forma parte del plan original descrito en
+  # Sources.txt. Si no lo necesitas, comenta este bloque y elimina la
+  # entrada THREADFIN_PORT del .env.
+  #
+  # NO monta /media ni /torrents: Threadfin es un proxy puro, no necesita
+  # acceso al sistema de archivos. Solo config y red.
+  #
+  # Una vez configurado (M3U + XMLTV desde iptv-org o tu proveedor), no
+  # hace falta acceder a su UI desde el host: Jellyfin se conecta por la
+  # red interna `multimedia-net` en http://threadfin:34400.
+  # ---------------------------------------------------------------------------
+  threadfin:
+    image: fyb3roptik/threadfin:latest
+    container_name: threadfin
+    restart: unless-stopped
+    networks:
+      - multimedia-net
+    ports:
+      - "${THREADFIN_PORT}:34400"
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - type: bind
+        source: ${DATA_ROOT}/config/threadfin
+        target: /home/threadfin/conf
 
 # =============================================================================
 # Red interna compartida por todos los servicios. Los hostname entre

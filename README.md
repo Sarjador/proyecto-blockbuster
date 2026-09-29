@@ -82,6 +82,7 @@ listados abajo son los valores por defecto).
 | qBittorrent | http://localhost:9080 | Cliente torrent. User/pass por defecto `admin` / `adminadmin` (cambia al primer login). **Importante**: revisa la sección §"Activación de descubrimiento de peers en qBittorrent" abajo. |
 | Tracearr | http://localhost:3000 | Ver §4 para los claim tokens. |
 | autobrr | http://localhost:7474 | Gestor automático de torrents (IRC, trackers privados). User/pass se pide en el primer arranque. Ver §"Configurar autobrr" abajo. |
+| Threadfin | http://localhost:34400 | Proxy IPTV (sucesor mantenido de xTeVe). Emula un sintonizador HDHomeRun para que Jellyfin muestre listas M3U + EPG como TV en directo. **Opcional** (no estaba en el plan original). Ver §"Configurar Threadfin para TV en directo" abajo. |
 | FlareSolverr | **no acceso web** | Se configura automáticamente en Jackett. |
 
 ### Activación de descubrimiento de peers en qBittorrent
@@ -143,6 +144,62 @@ la WebUI.
 2. En Sonarr: `Settings → Indexers → Add → Torznab → Custom`. Pon
    `http://jackett:9117` como URL y pega la API key. Si el indexador está
    protegido por Cloudflare, Jackett delegará en FlareSolverr.
+
+### Configurar Threadfin para TV en directo (opcional)
+
+Threadfin es un proxy IPTV que emula un sintonizador HDHomeRun. Combinado
+con Jellyfin, permite ver canales de TV en directo (listas M3U + guía EPG
+en XMLTV) sin plugins de terceros. Servicio **opcional**, no afecta al
+resto del stack si no lo activas.
+
+> **Fuente recomendada y gratuita**: [iptv-org/iptv](https://github.com/iptv-org/iptv),
+> que sirve M3Us por país, idioma y categoría desde GitHub Pages, junto con
+> EPG en formato XMLTV. Si tienes un proveedor IPTV de pago, usa la URL M3U
+> que te hayan dado.
+
+1. **Activar el servicio**: el bloque `threadfin` ya está en el
+   `docker-compose.yml`. Si tu `.env` es antiguo, añade `THREADFIN_PORT=34400`
+   y levanta solo este servicio:
+   ```bash
+   podman-compose up -d threadfin
+   ```
+2. **Abrir la UI** en `http://localhost:34400`. La primera vez te pedirá
+   crear usuario y contraseña.
+3. **Añadir la lista M3U**: `Settings → Playlist → Add playlist`:
+   - **Tipo**: `M3U`
+   - **URL**: por ejemplo, solo España desde iptv-org:
+     `https://iptv-org.github.io/iptv/countries/es.m3u`
+   - Guarda.
+4. **Añadir el EPG**: `Settings → XMLTV → Add XMLTV`:
+   - **URL**: `https://oscarbc96.github.io/epg-spain/guide.xml.gz`
+     (guía XMLTV de España, ~277 canales, actualizada a diario por
+     [oscarbc96/epg-spain](https://github.com/oscarbc96/epg-spain) vía
+     GitHub Actions; usa IDs estándar de iptv-org, así que casa con la M3U
+     `countries/es.m3u`).
+   - **Nota**: iptv-org NO publica EPGs por país; su repo `iptv-org/epg` es
+     una herramienta para generar la guía tú mismo. `epg-spain` es la
+     instancia comunitaria ya montada para España.
+   - Guarda y espera a que indexe (puede tardar varios minutos la primera
+     vez).
+5. **Conectar con Jellyfin**:
+   - `Dashboard → Live TV → Add Tuner Device`
+   - **Tipo**: `HDHomeRun`
+   - **URL del tuner**: `http://threadfin:34400` (nombre DNS de la red
+     interna `multimedia-net`, no `localhost`).
+   - Guarda. Jellyfin descubrirá los canales y los mapeará con el EPG.
+6. **Opcional — DVR**: en la sección Live TV de Jellyfin puedes habilitar
+   grabación de programas.
+
+Una vez configurado, no hace falta acceder a la UI de Threadfin desde el
+host: Jellyfin habla con él por la red interna `multimedia-net`. El puerto
+expuesto en el host solo se usa para la configuración inicial y para
+reajustes puntuales.
+
+> **Caveat de calidad**: iptv-org son canales **públicos y gratuitos**
+> (broadcasters oficiales, radios, cámaras en directo). No esperes el
+> típico paquete de "10 000 canales premium" de proveedores de pago. Si
+> algún canal de iptv-org se cae, es normal — son streams abiertos y la
+> curación es comunitaria.
 
 ---
 

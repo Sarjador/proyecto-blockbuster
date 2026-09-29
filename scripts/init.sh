@@ -67,6 +67,7 @@ SERVICES=(
     "config/tracearr"
     "config/redis"
     "config/postgres"
+    "config/threadfin"   # Proxy IPTV opcional (Threadfin). Ver README §"Configurar Threadfin".
 )
 
 echo "📁 Creando estructura bajo ${DATA_ROOT} ..."
